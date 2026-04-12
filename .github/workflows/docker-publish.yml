@@ -1,11 +1,20 @@
-# Builds the Dockerfile and pushes the image to ghcr.io/<owner>/<repo> from GitHub Actions only.
-# Picstome runtime containers do not push images; they pull this image to deploy.
+# -----------------------------------------------------------------------------
+# What this file does (and does NOT do)
+# -----------------------------------------------------------------------------
+# This workflow runs ONLY on GitHub’s hosted runners when you push to this
+# repository (see `on:` below) or when you manually trigger it. It builds the
+# Docker image from the Dockerfile and uploads that image to GitHub Container
+# Registry (GHCR). Your production container never runs this file and never
+# “pushes itself” to GHCR. Deploy machines only `docker pull` the image that was
+# already built here.
 #
 # After the first successful run, set the package visibility to Private:
 # https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility
 #
-# Pull on a server (classic PAT with read:packages, or fine-grained token with Packages read):
+# On a server, authenticate then pull (classic PAT with read:packages, or a
+# fine-grained token with Packages read):
 #   echo TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+# -----------------------------------------------------------------------------
 
 name: Publish Docker image to GHCR
 

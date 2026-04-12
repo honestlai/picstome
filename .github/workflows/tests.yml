@@ -1,3 +1,7 @@
+# Requires repository Actions secrets: FLUX_USERNAME, FLUX_LICENSE_KEY
+# (Settings → Secrets and variables → Actions). Flux Pro is already in composer.json;
+# `composer install` is enough—no separate `composer require` step.
+
 name: tests
 
 on:
@@ -13,7 +17,6 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    environment: Testing
 
     steps:
       - name: Checkout
@@ -22,7 +25,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: 8.4
+          php-version: '8.3'
           tools: composer:v2
           coverage: xdebug
 
@@ -43,9 +46,6 @@ jobs:
 
       - name: Install Dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
-
-      - name: Install Flux Pro
-        run: composer require livewire/flux-pro --no-interaction --prefer-dist --optimize-autoloader
 
       - name: Copy Environment File
         run: cp .env.example .env

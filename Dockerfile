@@ -29,7 +29,7 @@ RUN npm ci
 COPY resources ./resources
 COPY public ./public
 COPY lang ./lang
-COPY vite.config.js tailwind.config.js postcss.config.js jsconfig.json ./
+COPY vite.config.js tailwind.config.js postcss.config.js ./
 COPY routes ./routes
 COPY app ./app
 COPY bootstrap ./bootstrap

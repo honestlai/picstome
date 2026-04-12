@@ -22,6 +22,13 @@ return [
 
     'admin_emails' => env('PICSTOME_ADMIN_EMAILS') ? explode(',', env('PICSTOME_ADMIN_EMAILS')) : [],
 
+    /**
+     * Trusted reverse proxies. Use "*" behind Cloudflare or a single internal nginx when
+     * clients cannot reach the app directly. Comma-separated IPs/CIDRs are also supported.
+     * Leave unset for local development without a proxy.
+     */
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
     'disk' => 's3',
 
     // Number of days before expiration to send gallery reminder

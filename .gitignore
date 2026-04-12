@@ -16,6 +16,7 @@ Homestead.yaml
 npm-debug.log
 yarn-error.log
 /auth.json
+/docker/secrets/composer_auth.json
 /.fleet
 /.idea
 /.nova

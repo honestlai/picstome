@@ -56,3 +56,9 @@ In a **separate terminal**, build the assets in watch mode and start the develop
 ```bash
 composer run dev
 ```
+
+## Docker
+
+The repository includes a production-oriented `Dockerfile`, `docker-compose.yml` (runtime services and named volumes for storage, bootstrap cache, and the SQLite database directory), and `docker-compose.build.yml` for **local** image builds that require Flux Composer credentials in `docker/secrets/composer_auth.json` (see `docker/secrets/composer_auth.json.example`).
+
+The workflow `.github/workflows/docker-publish.yml` builds on pushes to `main` and version tags (`v*`) and pushes to **GHCR** at `ghcr.io/<owner>/<repo>`. Use the comments in the workflow file to make the package **private** and to authenticate `docker pull` on your server.

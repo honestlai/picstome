@@ -1,0 +1,81 @@
+# Picstome stack: web (nginx + PHP-FPM), queue worker, scheduler.
+# Volumes preserve storage (uploads, logs, framework), bootstrap/cache, and database files.
+#
+# Production (pull private GHCR image; no local build files required):
+#   echo YOUR_PAT | docker login ghcr.io -u GITHUB_USERNAME --password-stdin
+#   export PICSTOME_IMAGE=ghcr.io/picstome/picstome:latest
+#   docker compose pull
+#   docker compose up -d
+#
+# Local image build (Flux auth file required):
+#   cp docker/secrets/composer_auth.json.example docker/secrets/composer_auth.json
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
+
+name: picstome
+
+services:
+  app:
+    image: ${PICSTOME_IMAGE:-ghcr.io/picstome/picstome:latest}
+    ports:
+      - "${PICSTOME_HTTP_PORT:-8080}:80"
+    env_file:
+      - .env
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: ${APP_DEBUG:-false}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-*}
+    volumes:
+      - picstome_storage:/var/www/html/storage
+      - picstome_bootstrap_cache:/var/www/html/bootstrap/cache
+      - picstome_database:/var/www/html/database
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/up"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  queue:
+    image: ${PICSTOME_IMAGE:-ghcr.io/picstome/picstome:latest}
+    command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--max-time=3600", "--no-interaction"]
+    env_file:
+      - .env
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: ${APP_DEBUG:-false}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-*}
+      PICSTOME_OPTIMIZE: "0"
+    volumes:
+      - picstome_storage:/var/www/html/storage
+      - picstome_bootstrap_cache:/var/www/html/bootstrap/cache
+      - picstome_database:/var/www/html/database
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+
+  scheduler:
+    image: ${PICSTOME_IMAGE:-ghcr.io/picstome/picstome:latest}
+    command: ["php", "artisan", "schedule:work", "--no-interaction"]
+    env_file:
+      - .env
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: ${APP_DEBUG:-false}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-*}
+      PICSTOME_OPTIMIZE: "0"
+    volumes:
+      - picstome_storage:/var/www/html/storage
+      - picstome_bootstrap_cache:/var/www/html/bootstrap/cache
+      - picstome_database:/var/www/html/database
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  picstome_storage:
+  picstome_bootstrap_cache:
+  picstome_database:

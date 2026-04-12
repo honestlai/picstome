@@ -1,4 +1,6 @@
-# Pushes a container image to ghcr.io/<owner>/<repo> (GitHub Packages).
+# Builds the Dockerfile and pushes the image to ghcr.io/<owner>/<repo> from GitHub Actions only.
+# Picstome runtime containers do not push images; they pull this image to deploy.
+#
 # After the first successful run, set the package visibility to Private:
 # https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility
 #

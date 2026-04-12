@@ -1,14 +1,18 @@
-# Picstome (https://github.com/picstome/picstome) — Portainer-friendly stack (no .env file required).
-# Set secrets and URLs in the Portainer UI / stack environment. APP_KEY may be left empty: it is
-# generated once and stored on the `storage` volume at storage/app/.picstome_app_key.
+# Picstome — deploy the same image many times; persistent state lives on Docker volumes (back them up).
 #
-# First boot (empty volumes): SQLite file created, migrations run, storage:link, optional
-# PICSTOME_SEED_ON_FIRST_BOOT=1 for `php artisan db:seed` (upstream README uses migrate:fresh --seed
-# for local dev only; this stack never runs migrate:fresh).
+# IMPORTANT: Nothing in this stack pushes container images to GHCR (or any registry). Runtime
+# containers only PULL an image and run the app. New images are built and pushed by GitHub Actions
+# when you push commits to the repo (.github/workflows/docker-publish.yml) — that runs on
+# GitHub's infrastructure, not inside Picstome.
 #
-# Image: ghcr.io/honestlai/picstome — build/push via .github/workflows/docker-publish.yml
+# First boot (empty volumes): SQLite file (if sqlite), migrations, storage:link, persisted APP_KEY
+# on the storage volume; optional PICSTOME_SEED_ON_FIRST_BOOT=1 for db:seed once.
+# Later boots: same image + existing volumes = normal startup (no re-install).
 #
-# Requires external Docker network "Network-Bridge" (create once: docker network create Network-Bridge).
+# Default image (change with PICSTOME_IMAGE): ghcr.io/honestlai/picstome:latest
+#
+# Portainer: set env vars in the stack UI (no .env file). External network:
+#   docker network create Network-Bridge
 
 x-laravel-env: &laravel-env
   APP_NAME: ${APP_NAME:-Picstome}

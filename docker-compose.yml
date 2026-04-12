@@ -1,81 +1,148 @@
-# Picstome stack: web (nginx + PHP-FPM), queue worker, scheduler.
-# Volumes preserve storage (uploads, logs, framework), bootstrap/cache, and database files.
+# Picstome (https://github.com/picstome/picstome) — Portainer-friendly stack (no .env file required).
+# Set secrets and URLs in the Portainer UI / stack environment. APP_KEY may be left empty: it is
+# generated once and stored on the `storage` volume at storage/app/.picstome_app_key.
 #
-# Production (pull private GHCR image; no local build files required):
-#   echo YOUR_PAT | docker login ghcr.io -u GITHUB_USERNAME --password-stdin
-#   export PICSTOME_IMAGE=ghcr.io/picstome/picstome:latest
-#   docker compose pull
-#   docker compose up -d
+# First boot (empty volumes): SQLite file created, migrations run, storage:link, optional
+# PICSTOME_SEED_ON_FIRST_BOOT=1 for `php artisan db:seed` (upstream README uses migrate:fresh --seed
+# for local dev only; this stack never runs migrate:fresh).
 #
-# Local image build (Flux auth file required):
-#   cp docker/secrets/composer_auth.json.example docker/secrets/composer_auth.json
-#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
-#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
+# Image: ghcr.io/honestlai/picstome — build/push via .github/workflows/docker-publish.yml
+#
+# Requires external Docker network "Network-Bridge" (create once: docker network create Network-Bridge).
 
-name: picstome
+x-laravel-env: &laravel-env
+  APP_NAME: ${APP_NAME:-Picstome}
+  APP_ENV: ${APP_ENV:-production}
+  APP_KEY: ${APP_KEY:-}
+  APP_DEBUG: ${APP_DEBUG:-false}
+  APP_TIMEZONE: ${APP_TIMEZONE:-UTC}
+  APP_URL: ${APP_URL:-http://localhost}
+  TRUSTED_PROXIES: ${TRUSTED_PROXIES:-*}
+  APP_LOCALE: ${APP_LOCALE:-en}
+  APP_FALLBACK_LOCALE: ${APP_FALLBACK_LOCALE:-en}
+  APP_FAKER_LOCALE: ${APP_FAKER_LOCALE:-en_US}
+  APP_MAINTENANCE_DRIVER: ${APP_MAINTENANCE_DRIVER:-file}
+  LOG_CHANNEL: ${LOG_CHANNEL:-stack}
+  LOG_STACK: ${LOG_STACK:-single}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  DB_CONNECTION: ${DB_CONNECTION:-sqlite}
+  DB_HOST: ${DB_HOST:-127.0.0.1}
+  DB_PORT: ${DB_PORT:-3306}
+  DB_DATABASE: ${DB_DATABASE:-database/database.sqlite}
+  DB_USERNAME: ${DB_USERNAME:-root}
+  DB_PASSWORD: ${DB_PASSWORD:-}
+  SESSION_DRIVER: ${SESSION_DRIVER:-database}
+  SESSION_LIFETIME: ${SESSION_LIFETIME:-120}
+  SESSION_ENCRYPT: ${SESSION_ENCRYPT:-false}
+  BROADCAST_CONNECTION: ${BROADCAST_CONNECTION:-log}
+  FILESYSTEM_DISK: ${FILESYSTEM_DISK:-local}
+  QUEUE_CONNECTION: ${QUEUE_CONNECTION:-database}
+  CACHE_STORE: ${CACHE_STORE:-database}
+  CACHE_PREFIX: ${CACHE_PREFIX:-}
+  REDIS_HOST: ${REDIS_HOST:-127.0.0.1}
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+  REDIS_PORT: ${REDIS_PORT:-6379}
+  MAIL_MAILER: ${MAIL_MAILER:-log}
+  MAIL_HOST: ${MAIL_HOST:-127.0.0.1}
+  MAIL_PORT: ${MAIL_PORT:-2525}
+  MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-hello@example.com}
+  MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Picstome}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+  AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+  AWS_BUCKET: ${AWS_BUCKET:-}
+  AWS_USE_PATH_STYLE_ENDPOINT: ${AWS_USE_PATH_STYLE_ENDPOINT:-false}
+  AWS_ORIGIN: ${AWS_ORIGIN:-}
+  VITE_APP_NAME: ${VITE_APP_NAME:-Picstome}
+  STRIPE_KEY: ${STRIPE_KEY:-}
+  STRIPE_SECRET: ${STRIPE_SECRET:-}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+  STRIPE_LIVE_SECRET: ${STRIPE_LIVE_SECRET:-}
+  STRIPE_TEST_SECRET: ${STRIPE_TEST_SECRET:-}
+  STRIPE_EN_PRICING_TABLE_ID: ${STRIPE_EN_PRICING_TABLE_ID:-}
+  STRIPE_ES_PRICING_TABLE_ID: ${STRIPE_ES_PRICING_TABLE_ID:-}
+  STRIPE_LIFETIME_PRICE_ID: ${STRIPE_LIFETIME_PRICE_ID:-}
+  PICSTOME_ADMIN_EMAILS: ${PICSTOME_ADMIN_EMAILS:-admin@example.com}
+  PICSTOME_PHOTO_CDN_DOMAIN: ${PICSTOME_PHOTO_CDN_DOMAIN:-wsrv.nl}
+  LIVEWIRE_TEMPORARY_FILE_UPLOAD_DISK: ${LIVEWIRE_TEMPORARY_FILE_UPLOAD_DISK:-}
+  SHORT_URL_DOMAIN: ${SHORT_URL_DOMAIN:-}
+  HONEYBADGER_API_KEY: ${HONEYBADGER_API_KEY:-}
+  HONEYBADGER_VERIFY_SSL: ${HONEYBADGER_VERIFY_SSL:-}
+  ACUMBAMAIL_AUTH_TOKEN: ${ACUMBAMAIL_AUTH_TOKEN:-}
+  ACUMBAMAIL_LIST_ID: ${ACUMBAMAIL_LIST_ID:-}
+  ACUMBAMAIL_LIST_ID_ES: ${ACUMBAMAIL_LIST_ID_ES:-}
+  PICSTOME_AUTO_MIGRATE: ${PICSTOME_AUTO_MIGRATE:-1}
+  PICSTOME_SEED_ON_FIRST_BOOT: ${PICSTOME_SEED_ON_FIRST_BOOT:-0}
 
 services:
   app:
-    image: ${PICSTOME_IMAGE:-ghcr.io/picstome/picstome:latest}
+    container_name: Picstome-App
+    restart: always
+    image: ${PICSTOME_IMAGE:-ghcr.io/honestlai/picstome:latest}
     ports:
       - "${PICSTOME_HTTP_PORT:-8080}:80"
-    env_file:
-      - .env
     environment:
-      APP_ENV: ${APP_ENV:-production}
-      APP_DEBUG: ${APP_DEBUG:-false}
-      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-*}
+      <<: *laravel-env
+      PICSTOME_CONTAINER_ROLE: web
     volumes:
-      - picstome_storage:/var/www/html/storage
-      - picstome_bootstrap_cache:/var/www/html/bootstrap/cache
-      - picstome_database:/var/www/html/database
-    restart: unless-stopped
+      - storage:/var/www/html/storage
+      - bootstrap_cache:/var/www/html/bootstrap/cache
+      - database:/var/www/html/database
+    networks:
+      - Network-Bridge
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1/up"]
       interval: 30s
       timeout: 5s
       retries: 5
-      start_period: 60s
+      start_period: 90s
 
   queue:
-    image: ${PICSTOME_IMAGE:-ghcr.io/picstome/picstome:latest}
+    container_name: Picstome-Queue
+    restart: always
+    image: ${PICSTOME_IMAGE:-ghcr.io/honestlai/picstome:latest}
     command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--max-time=3600", "--no-interaction"]
-    env_file:
-      - .env
     environment:
-      APP_ENV: ${APP_ENV:-production}
-      APP_DEBUG: ${APP_DEBUG:-false}
-      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-*}
+      <<: *laravel-env
+      PICSTOME_CONTAINER_ROLE: worker
       PICSTOME_OPTIMIZE: "0"
     volumes:
-      - picstome_storage:/var/www/html/storage
-      - picstome_bootstrap_cache:/var/www/html/bootstrap/cache
-      - picstome_database:/var/www/html/database
-    restart: unless-stopped
+      - storage:/var/www/html/storage
+      - bootstrap_cache:/var/www/html/bootstrap/cache
+      - database:/var/www/html/database
+    networks:
+      - Network-Bridge
     depends_on:
       app:
         condition: service_healthy
 
   scheduler:
-    image: ${PICSTOME_IMAGE:-ghcr.io/picstome/picstome:latest}
+    container_name: Picstome-Scheduler
+    restart: always
+    image: ${PICSTOME_IMAGE:-ghcr.io/honestlai/picstome:latest}
     command: ["php", "artisan", "schedule:work", "--no-interaction"]
-    env_file:
-      - .env
     environment:
-      APP_ENV: ${APP_ENV:-production}
-      APP_DEBUG: ${APP_DEBUG:-false}
-      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-*}
+      <<: *laravel-env
+      PICSTOME_CONTAINER_ROLE: worker
       PICSTOME_OPTIMIZE: "0"
     volumes:
-      - picstome_storage:/var/www/html/storage
-      - picstome_bootstrap_cache:/var/www/html/bootstrap/cache
-      - picstome_database:/var/www/html/database
-    restart: unless-stopped
+      - storage:/var/www/html/storage
+      - bootstrap_cache:/var/www/html/bootstrap/cache
+      - database:/var/www/html/database
+    networks:
+      - Network-Bridge
     depends_on:
       app:
         condition: service_healthy
 
+networks:
+  Network-Bridge:
+    external: true
+
 volumes:
-  picstome_storage:
-  picstome_bootstrap_cache:
-  picstome_database:
+  storage:
+    name: storage
+  bootstrap_cache:
+    name: bootstrap_cache
+  database:
+    name: database

@@ -59,6 +59,10 @@ composer run dev
 
 ## Docker
 
-The repository includes a production-oriented `Dockerfile`, `docker-compose.yml` (runtime services and named volumes for storage, bootstrap cache, and the SQLite database directory), and `docker-compose.build.yml` for **local** image builds that require Flux Composer credentials in `docker/secrets/composer_auth.json` (see `docker/secrets/composer_auth.json.example`).
+This fork ships a production-oriented [`Dockerfile`](Dockerfile), [`docker-compose.yml`](docker-compose.yml) for **Portainer** (no `.env` file: variables are defined in the stack with defaults), and [`docker-compose.build.yml`](docker-compose.build.yml) for local image builds using Flux credentials in `docker/secrets/composer_auth.json` (see [`docker/secrets/composer_auth.json.example`](docker/secrets/composer_auth.json.example)).
 
-The workflow `.github/workflows/docker-publish.yml` builds on pushes to `main` and version tags (`v*`) and pushes to **GHCR** at `ghcr.io/<owner>/<repo>`. Use the comments in the workflow file to make the package **private** and to authenticate `docker pull` on your server.
+The compose file expects an external Docker network named **`Network-Bridge`** (`docker network create Network-Bridge`). It runs **app** (nginx + PHP-FPM), **queue**, and **scheduler** against named volumes `storage`, `bootstrap_cache`, and `database`. The default image is **`ghcr.io/honestlai/picstome:latest`** (override with `PICSTOME_IMAGE`).
+
+On **first boot**, the entrypoint follows the same provisioning ideas as the [upstream Picstome README](https://github.com/picstome/picstome?tab=readme-ov-file): ensure SQLite exists when using `DB_CONNECTION=sqlite`, run `php artisan migrate --force`, `php artisan storage:link`, and persist `APP_KEY` under `storage/app/.picstome_app_key` when `APP_KEY` is not set in the environment. Optional one-time seeding: set `PICSTOME_SEED_ON_FIRST_BOOT=1` in Portainer (the upstream README’s `migrate:fresh --seed` is for local development only; this stack never runs `migrate:fresh`). Set `PICSTOME_AUTO_MIGRATE=0` only if you run migrations yourself.
+
+The workflow [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) builds on pushes to `main` and tags `v*` and pushes to **GHCR** at `ghcr.io/<owner>/<repo>`. Use the workflow comments to keep the package **private** and to authenticate `docker pull` on your server.

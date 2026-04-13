@@ -1,8 +1,8 @@
-# Merge with docker-compose.yml for local builds only:
+# Merge with docker-compose.yml for local image builds only:
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml build
 #
 # Requires docker/secrets/composer_auth.json (see docker/secrets/composer_auth.json.example).
-# Pushed image default: ghcr.io/honestlai/picstome (see PICSTOME_IMAGE in docker-compose.yml).
+# Runtime stack (MySQL + app + queue + scheduler) is docker-compose.yml; use docker/sample.env in Portainer.
 
 services:
   app:

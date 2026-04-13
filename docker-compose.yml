@@ -1,18 +1,13 @@
-# Picstome — deploy the same image many times; persistent state lives on Docker volumes (back them up).
+# Picstome — one-stack deploy for Portainer (paste stack + env from docker/sample.env).
 #
-# IMPORTANT: Nothing in this stack pushes container images to GHCR (or any registry). Runtime
-# containers only PULL an image and run the app. New images are built and pushed by GitHub Actions
-# when you push commits to the repo (.github/workflows/docker-publish.yml) — that runs on
-# GitHub's infrastructure, not inside Picstome.
+# Includes: MySQL 8, app (nginx + PHP-FPM), queue worker, scheduler. Uses external
+# network "Network-Bridge" (create once: docker network create Network-Bridge).
 #
-# First boot (empty volumes): SQLite file (if sqlite), migrations, storage:link, persisted APP_KEY
-# on the storage volume; optional PICSTOME_SEED_ON_FIRST_BOOT=1 for db:seed once.
-# Later boots: same image + existing volumes = normal startup (no re-install).
+# APP_KEY may be empty: generated on first boot and stored under storage/app/.picstome_app_key
+# on the `storage` volume. First boot runs migrations, storage:link, optional seed
+# (PICSTOME_SEED_ON_FIRST_BOOT=1). Image default: ghcr.io/honestlai/picstome:latest
 #
-# Default image (change with PICSTOME_IMAGE): ghcr.io/honestlai/picstome:latest
-#
-# Portainer: set env vars in the stack UI (no .env file). External network:
-#   docker network create Network-Bridge
+# Do not mount a volume over /var/www/html/database — it would hide migration files from the image.
 
 x-laravel-env: &laravel-env
   APP_NAME: ${APP_NAME:-Picstome}
@@ -29,15 +24,16 @@ x-laravel-env: &laravel-env
   LOG_CHANNEL: ${LOG_CHANNEL:-stack}
   LOG_STACK: ${LOG_STACK:-single}
   LOG_LEVEL: ${LOG_LEVEL:-info}
-  DB_CONNECTION: ${DB_CONNECTION:-sqlite}
-  DB_HOST: ${DB_HOST:-127.0.0.1}
+  DB_CONNECTION: ${DB_CONNECTION:-mysql}
+  DB_HOST: ${DB_HOST:-mysql}
   DB_PORT: ${DB_PORT:-3306}
-  DB_DATABASE: ${DB_DATABASE:-database/database.sqlite}
-  DB_USERNAME: ${DB_USERNAME:-root}
-  DB_PASSWORD: ${DB_PASSWORD:-}
+  DB_DATABASE: ${DB_DATABASE:-picstome}
+  DB_USERNAME: ${DB_USERNAME:-picstome}
+  DB_PASSWORD: ${DB_PASSWORD:-picstome}
   SESSION_DRIVER: ${SESSION_DRIVER:-database}
   SESSION_LIFETIME: ${SESSION_LIFETIME:-120}
   SESSION_ENCRYPT: ${SESSION_ENCRYPT:-false}
+  SESSION_DOMAIN: ${SESSION_DOMAIN:-}
   BROADCAST_CONNECTION: ${BROADCAST_CONNECTION:-log}
   FILESYSTEM_DISK: ${FILESYSTEM_DISK:-local}
   QUEUE_CONNECTION: ${QUEUE_CONNECTION:-database}
@@ -47,8 +43,11 @@ x-laravel-env: &laravel-env
   REDIS_PASSWORD: ${REDIS_PASSWORD:-}
   REDIS_PORT: ${REDIS_PORT:-6379}
   MAIL_MAILER: ${MAIL_MAILER:-log}
+  MAIL_SCHEME: ${MAIL_SCHEME:-}
   MAIL_HOST: ${MAIL_HOST:-127.0.0.1}
   MAIL_PORT: ${MAIL_PORT:-2525}
+  MAIL_USERNAME: ${MAIL_USERNAME:-}
+  MAIL_PASSWORD: ${MAIL_PASSWORD:-}
   MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-hello@example.com}
   MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Picstome}
   AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
@@ -79,6 +78,30 @@ x-laravel-env: &laravel-env
   PICSTOME_SEED_ON_FIRST_BOOT: ${PICSTOME_SEED_ON_FIRST_BOOT:-0}
 
 services:
+  mysql:
+    container_name: Picstome-MySQL
+    restart: always
+    image: ${MYSQL_IMAGE:-mysql:8.0}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_allowed_packet=256M
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-picstome-root-change-me}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-picstome}
+      MYSQL_USER: ${MYSQL_USER:-picstome}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-picstome}
+    volumes:
+      - mysql:/var/lib/mysql
+    networks:
+      - Network-Bridge
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
   app:
     container_name: Picstome-App
     restart: always
@@ -91,15 +114,17 @@ services:
     volumes:
       - storage:/var/www/html/storage
       - bootstrap_cache:/var/www/html/bootstrap/cache
-      - database:/var/www/html/database
     networks:
       - Network-Bridge
+    depends_on:
+      mysql:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1/up"]
       interval: 30s
       timeout: 5s
       retries: 5
-      start_period: 90s
+      start_period: 120s
 
   queue:
     container_name: Picstome-Queue
@@ -113,10 +138,11 @@ services:
     volumes:
       - storage:/var/www/html/storage
       - bootstrap_cache:/var/www/html/bootstrap/cache
-      - database:/var/www/html/database
     networks:
       - Network-Bridge
     depends_on:
+      mysql:
+        condition: service_healthy
       app:
         condition: service_healthy
 
@@ -132,10 +158,11 @@ services:
     volumes:
       - storage:/var/www/html/storage
       - bootstrap_cache:/var/www/html/bootstrap/cache
-      - database:/var/www/html/database
     networks:
       - Network-Bridge
     depends_on:
+      mysql:
+        condition: service_healthy
       app:
         condition: service_healthy
 
@@ -144,9 +171,9 @@ networks:
     external: true
 
 volumes:
+  mysql:
+    name: mysql
   storage:
     name: storage
   bootstrap_cache:
     name: bootstrap_cache
-  database:
-    name: database

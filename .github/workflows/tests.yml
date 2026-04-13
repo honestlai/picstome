@@ -1,6 +1,4 @@
-# Requires repository Actions secrets: FLUX_USERNAME, FLUX_LICENSE_KEY
-# (Settings → Secrets and variables → Actions). Flux Pro is already in composer.json;
-# `composer install` is enough—no separate `composer require` step.
+# Pest runs when Flux credentials exist. Otherwise the skip job passes (no failure emails).
 
 name: tests
 
@@ -15,9 +13,35 @@ on:
       - main
 
 jobs:
-  ci:
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      has_flux: ${{ steps.check.outputs.flux }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ secrets.FLUX_USERNAME }}" ] && [ -n "${{ secrets.FLUX_LICENSE_KEY }}" ]; then
+            echo "flux=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "flux=no" >> "$GITHUB_OUTPUT"
+          fi
 
+  skip-without-flux:
+    name: Skip (Flux secrets not configured)
+    needs: prepare
+    if: needs.prepare.outputs.has_flux == 'no'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notice
+        run: |
+          echo "::notice::Add repository secrets FLUX_USERNAME and FLUX_LICENSE_KEY to enable tests."
+          exit 0
+
+  ci:
+    name: Pest
+    needs: prepare
+    if: needs.prepare.outputs.has_flux == 'yes'
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,26 +59,26 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install Node Dependencies
+      - name: Install Node dependencies
         run: npm i
 
       - name: Install Playwright
         run: npm install playwright@latest && npx playwright install
 
-      - name: Add Flux Credentials Loaded From ENV
+      - name: Add Flux credentials
         run: composer config http-basic.composer.fluxui.dev "${{ secrets.FLUX_USERNAME }}" "${{ secrets.FLUX_LICENSE_KEY }}"
 
-      - name: Install Dependencies
+      - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
-      - name: Copy Environment File
+      - name: Copy environment file
         run: cp .env.example .env
 
-      - name: Generate Application Key
+      - name: Generate application key
         run: php artisan key:generate
 
-      - name: Build Assets
+      - name: Build assets
         run: npm run build
 
-      - name: Run Tests
+      - name: Run tests
         run: ./vendor/bin/pest

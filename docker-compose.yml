@@ -1,13 +1,16 @@
 # Picstome — one-stack deploy for Portainer (paste stack + env from docker/sample.env).
 #
-# Includes: MySQL 8, app (nginx + PHP-FPM), queue worker, scheduler. Uses external
-# network "Network-Bridge" (create once: docker network create Network-Bridge).
+# Services (front → back): PicstomeApp → PicstomeQueue, PicstomeScheduler → PicstomeDB.
+# Networks and named volumes are listed after services.
 #
-# APP_KEY may be empty: generated on first boot and stored under storage/app/.picstome_app_key
-# on the `storage` volume. First boot runs migrations, storage:link, optional seed
-# (PICSTOME_SEED_ON_FIRST_BOOT=1). Image default: ghcr.io/honestlai/picstome:latest
+# Note: `x-laravel-env` must appear before `services:` so YAML can resolve `<<: *laravel-env`.
+# Network: external "Network-Bridge" (docker network create Network-Bridge).
 #
-# Do not mount a volume over /var/www/html/database — it would hide migration files from the image.
+# APP_KEY may be empty: stored on the `storage` volume at storage/app/.picstome_app_key.
+# First boot: migrate, storage:link; optional PICSTOME_SEED_ON_FIRST_BOOT=1.
+# Image default: ghcr.io/honestlai/picstome:latest
+#
+# Do not mount a volume over /var/www/html/database — it hides migration files in the image.
 
 x-laravel-env: &laravel-env
   APP_NAME: ${APP_NAME:-Picstome}
@@ -25,7 +28,7 @@ x-laravel-env: &laravel-env
   LOG_STACK: ${LOG_STACK:-single}
   LOG_LEVEL: ${LOG_LEVEL:-info}
   DB_CONNECTION: ${DB_CONNECTION:-mysql}
-  DB_HOST: ${DB_HOST:-mysql}
+  DB_HOST: ${DB_HOST:-db}
   DB_PORT: ${DB_PORT:-3306}
   DB_DATABASE: ${DB_DATABASE:-picstome}
   DB_USERNAME: ${DB_USERNAME:-picstome}
@@ -78,8 +81,72 @@ x-laravel-env: &laravel-env
   PICSTOME_SEED_ON_FIRST_BOOT: ${PICSTOME_SEED_ON_FIRST_BOOT:-0}
 
 services:
-  mysql:
-    container_name: Picstome-MySQL
+  app:
+    container_name: PicstomeApp
+    restart: always
+    image: ${PICSTOME_IMAGE:-ghcr.io/honestlai/picstome:latest}
+    ports:
+      - "${PICSTOME_HTTP_PORT:-8080}:80"
+    environment:
+      <<: *laravel-env
+      PICSTOME_CONTAINER_ROLE: web
+    volumes:
+      - storage:/var/www/html/storage
+      - cache:/var/www/html/bootstrap/cache
+    networks:
+      - Network-Bridge
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/up"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+
+  queue:
+    container_name: PicstomeQueue
+    restart: always
+    image: ${PICSTOME_IMAGE:-ghcr.io/honestlai/picstome:latest}
+    command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--max-time=3600", "--no-interaction"]
+    environment:
+      <<: *laravel-env
+      PICSTOME_CONTAINER_ROLE: worker
+      PICSTOME_OPTIMIZE: "0"
+    volumes:
+      - storage:/var/www/html/storage
+      - cache:/var/www/html/bootstrap/cache
+    networks:
+      - Network-Bridge
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+
+  scheduler:
+    container_name: PicstomeScheduler
+    restart: always
+    image: ${PICSTOME_IMAGE:-ghcr.io/honestlai/picstome:latest}
+    command: ["php", "artisan", "schedule:work", "--no-interaction"]
+    environment:
+      <<: *laravel-env
+      PICSTOME_CONTAINER_ROLE: worker
+      PICSTOME_OPTIMIZE: "0"
+    volumes:
+      - storage:/var/www/html/storage
+      - cache:/var/www/html/bootstrap/cache
+    networks:
+      - Network-Bridge
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+
+  db:
+    container_name: PicstomeDB
     restart: always
     image: ${MYSQL_IMAGE:-mysql:8.0}
     command:
@@ -92,7 +159,7 @@ services:
       MYSQL_USER: ${MYSQL_USER:-picstome}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-picstome}
     volumes:
-      - mysql:/var/lib/mysql
+      - db:/var/lib/mysql
     networks:
       - Network-Bridge
     healthcheck:
@@ -102,78 +169,14 @@ services:
       retries: 12
       start_period: 30s
 
-  app:
-    container_name: Picstome-App
-    restart: always
-    image: ${PICSTOME_IMAGE:-ghcr.io/honestlai/picstome:latest}
-    ports:
-      - "${PICSTOME_HTTP_PORT:-8080}:80"
-    environment:
-      <<: *laravel-env
-      PICSTOME_CONTAINER_ROLE: web
-    volumes:
-      - storage:/var/www/html/storage
-      - bootstrap_cache:/var/www/html/bootstrap/cache
-    networks:
-      - Network-Bridge
-    depends_on:
-      mysql:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/up"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 120s
-
-  queue:
-    container_name: Picstome-Queue
-    restart: always
-    image: ${PICSTOME_IMAGE:-ghcr.io/honestlai/picstome:latest}
-    command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--max-time=3600", "--no-interaction"]
-    environment:
-      <<: *laravel-env
-      PICSTOME_CONTAINER_ROLE: worker
-      PICSTOME_OPTIMIZE: "0"
-    volumes:
-      - storage:/var/www/html/storage
-      - bootstrap_cache:/var/www/html/bootstrap/cache
-    networks:
-      - Network-Bridge
-    depends_on:
-      mysql:
-        condition: service_healthy
-      app:
-        condition: service_healthy
-
-  scheduler:
-    container_name: Picstome-Scheduler
-    restart: always
-    image: ${PICSTOME_IMAGE:-ghcr.io/honestlai/picstome:latest}
-    command: ["php", "artisan", "schedule:work", "--no-interaction"]
-    environment:
-      <<: *laravel-env
-      PICSTOME_CONTAINER_ROLE: worker
-      PICSTOME_OPTIMIZE: "0"
-    volumes:
-      - storage:/var/www/html/storage
-      - bootstrap_cache:/var/www/html/bootstrap/cache
-    networks:
-      - Network-Bridge
-    depends_on:
-      mysql:
-        condition: service_healthy
-      app:
-        condition: service_healthy
-
 networks:
   Network-Bridge:
     external: true
 
 volumes:
-  mysql:
-    name: mysql
+  db:
+    name: db
   storage:
     name: storage
-  bootstrap_cache:
-    name: bootstrap_cache
+  cache:
+    name: cache

@@ -1,3 +1,5 @@
+# Pings DEPLOY_WEBHOOK on push to main when the secret is set. Otherwise skip passes.
+
 name: Deploy
 
 on:
@@ -7,13 +9,37 @@ on:
       - main
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      has_webhook: ${{ steps.check.outputs.hook }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ secrets.DEPLOY_WEBHOOK }}" ]; then
+            echo "hook=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "hook=no" >> "$GITHUB_OUTPUT"
+          fi
+
+  skip-without-webhook:
+    name: Skip (DEPLOY_WEBHOOK not configured)
+    needs: prepare
+    if: needs.prepare.outputs.has_webhook == 'no'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notice
+        run: |
+          echo "::notice::Add repository secret DEPLOY_WEBHOOK to ping your deploy server."
+          exit 0
+
   webhook:
     name: Ping webhook
+    needs: prepare
+    if: needs.prepare.outputs.has_webhook == 'yes'
     runs-on: ubuntu-latest
-    environment: Production
     steps:
-      - name: Use curl to ping webhook
+      - name: Ping deploy webhook
         env:
           DEPLOY_WEBHOOK: ${{ secrets.DEPLOY_WEBHOOK }}
-        run: |
-          curl -n "$DEPLOY_WEBHOOK"
+        run: curl -fsS -n "$DEPLOY_WEBHOOK"

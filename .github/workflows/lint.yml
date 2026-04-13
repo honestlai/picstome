@@ -1,4 +1,4 @@
-# Requires repository Actions secrets: FLUX_USERNAME, FLUX_LICENSE_KEY
+# Pint runs when Flux credentials exist. Otherwise the skip job passes (no failure emails).
 
 name: linter
 
@@ -13,10 +13,37 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      has_flux: ${{ steps.check.outputs.flux }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ secrets.FLUX_USERNAME }}" ] && [ -n "${{ secrets.FLUX_LICENSE_KEY }}" ]; then
+            echo "flux=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "flux=no" >> "$GITHUB_OUTPUT"
+          fi
+
+  skip-without-flux:
+    name: Skip (Flux secrets not configured)
+    needs: prepare
+    if: needs.prepare.outputs.has_flux == 'no'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notice
+        run: |
+          echo "::notice::Add repository secrets FLUX_USERNAME and FLUX_LICENSE_KEY to enable Pint."
+          exit 0
+
   quality:
+    name: Pint
+    needs: prepare
+    if: needs.prepare.outputs.has_flux == 'yes'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,22 +53,13 @@ jobs:
         with:
           php-version: '8.3'
 
-      - name: Add Flux Credentials Loaded From ENV
+      - name: Add Flux credentials
         run: composer config http-basic.composer.fluxui.dev "${{ secrets.FLUX_USERNAME }}" "${{ secrets.FLUX_LICENSE_KEY }}"
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
           npm install
 
       - name: Run Pint
         run: vendor/bin/pint
-
-      # - name: Commit Changes
-      #   uses: stefanzweifel/git-auto-commit-action@v5
-      #   with:
-      #     commit_message: fix code style
-      #     commit_options: '--no-verify'
-      #     file_pattern: |
-      #       **/*
-      #       !.github/workflows/*

@@ -13,7 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        $trusted = config('picstome.trusted_proxies');
+        $trusted = env('TRUSTED_PROXIES', '*');
 
         if ($trusted !== null && $trusted !== '') {
             $at = $trusted === '*'

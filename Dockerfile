@@ -57,6 +57,7 @@ RUN apt-get update \
         libjpeg62-turbo-dev \
         libpng-dev \
         libwebp-dev \
+        libsqlite3-dev \
         libzip-dev \
         libicu-dev \
         libonig-dev \

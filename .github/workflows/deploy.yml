@@ -42,4 +42,4 @@ jobs:
       - name: Ping deploy webhook
         env:
           DEPLOY_WEBHOOK: ${{ secrets.DEPLOY_WEBHOOK }}
-        run: curl -fsS -n "$DEPLOY_WEBHOOK"
+        run: curl -fsS "$DEPLOY_WEBHOOK"

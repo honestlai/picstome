@@ -1,8 +1,7 @@
 # Merge with docker-compose.yml for local image builds only:
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml build
 #
-# Either: (1) run `composer install` in the repo so vendor/ includes livewire/flux-pro (Dockerfile
-# reuses host vendor via bind mount), or (2) provide docker/secrets/composer_auth.json (see example).
+# Requires docker/secrets/composer_auth.json (see docker/secrets/composer_auth.json.example).
 # Runtime stack is docker-compose.yml; use docker/sample.env in Portainer.
 
 services:

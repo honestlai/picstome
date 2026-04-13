@@ -6,38 +6,15 @@ WORKDIR /app
 
 COPY composer.json composer.lock ./
 
-# Prefer vendor/ from the build host (BuildKit bind mount; not subject to .dockerignore).
-# Use this after `composer install` locally or in CI so Flux packages are already on disk.
-# Otherwise require BuildKit secret `composer_auth` with composer.fluxui.dev credentials.
-RUN --mount=type=bind,source=.,target=/ctx,readonly \
-    --mount=type=secret,id=composer_auth,required=false \
-    sh -c 'set -e; \
-    if [ -f /ctx/vendor/autoload.php ] && [ -d /ctx/vendor/livewire/flux-pro ]; then \
-      echo "vendor stage: reusing host vendor/ (includes Flux Pro)"; \
-      cp -a /ctx/vendor /app/vendor; \
-      composer install \
+RUN --mount=type=secret,id=composer_auth \
+    sh -c 'export COMPOSER_AUTH="$(cat /run/secrets/composer_auth)" \
+    && composer install \
         --no-dev \
         --no-interaction \
         --no-progress \
         --prefer-dist \
         --no-scripts \
-        --ignore-platform-reqs; \
-    else \
-      echo "vendor stage: installing from lock (Flux auth required)"; \
-      if [ ! -f /run/secrets/composer_auth ] || [ ! -s /run/secrets/composer_auth ]; then \
-        echo "ERROR: No complete vendor/ on host and composer_auth secret is missing or empty." >&2; \
-        echo "Fix: run composer install (with Flux) in the project root, or pass BuildKit secret composer_auth." >&2; \
-        exit 1; \
-      fi; \
-      export COMPOSER_AUTH="$(cat /run/secrets/composer_auth)"; \
-      composer install \
-        --no-dev \
-        --no-interaction \
-        --no-progress \
-        --prefer-dist \
-        --no-scripts \
-        --ignore-platform-reqs; \
-    fi'
+        --ignore-platform-reqs'
 
 FROM node:22-bookworm AS frontend
 

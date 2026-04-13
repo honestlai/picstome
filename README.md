@@ -69,6 +69,6 @@ On **first boot**, the entrypoint follows the same provisioning ideas as the [up
 
 GitHub Actions: add repository secrets **`FLUX_USERNAME`** and **`FLUX_LICENSE_KEY`** so **tests**, **linter**, and **Docker publish** run for real; without them, those workflows **skip** with a green notice (no failure spam). Optional **`DEPLOY_WEBHOOK`** enables the deploy workflow’s curl step.
 
-**Building the Docker image locally:** the `vendor` stage prefers a **complete `vendor/` on your machine** (including `livewire/flux-pro`) from `composer install` with Flux credentials, then `docker compose -f docker-compose.yml -f docker-compose.build.yml build` can succeed **without** a valid BuildKit secret. Otherwise keep `docker/secrets/composer_auth.json` for the build secret. On GitHub, **Publish Docker image** runs `composer install` before `docker build` so the bind-mounted `vendor/` is populated.
+**Building the Docker image locally:** provide `docker/secrets/composer_auth.json` (from `docker/secrets/composer_auth.json.example`) with valid Flux credentials, then run `docker compose -f docker-compose.yml -f docker-compose.build.yml build`. On GitHub, **Publish Docker image** creates the same Composer auth JSON from secrets and passes it as a BuildKit secret.
 
 The workflow [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) runs **on GitHub when you push** (not inside your container), builds the image, and pushes to **GHCR** at `ghcr.io/<owner>/<repo>`. Set the package **private** if you want; use a PAT to `docker pull` on your server.
